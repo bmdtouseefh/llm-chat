@@ -10,30 +10,45 @@ import {
   RotateCcw,
   User,
   Bot,
+  ChevronDown,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { Switch } from "@/components/ui/switch";
+import { v4 as uuidv4 } from "uuid";
 
 export default function ChatbotLayout() {
   const [inputValue, setInputValue] = useState("");
-  const [messages, setMessages] = useState([
-    {
-      id: 1,
-      type: "user",
-      content: "What can you tell me about quantum computing?",
-      timestamp: new Date(Date.now() - 10000),
-    },
-    {
-      id: 2,
-      type: "assistant",
-      content:
-        'Quantum computing is a revolutionary computing paradigm that leverages quantum mechanical phenomena like superposition and entanglement to process information. Unlike classical computers that use bits (0 or 1), quantum computers use quantum bits or "qubits" that can exist in multiple states simultaneously.\n\nKey advantages include:\n• Exponential speedup for certain problems\n• Complex optimization capabilities\n• Cryptographic applications\n• Drug discovery and molecular modeling\n\nHowever, quantum computers are still in early stages, facing challenges like quantum decoherence, error rates, and the need for extremely cold operating temperatures.',
-      timestamp: new Date(Date.now() - 5000),
-    },
-  ]);
+  const [messages, setMessages] = useState([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [tools, setTools] = useState([]);
+  const [enabledTools, setEnabledTools] = useState(new Set());
 
   const scrollAreaRef = useRef(null);
+
+  // Fetch available tools on component mount
+  useEffect(() => {
+    const fetchTools = async () => {
+      try {
+        const response = await fetch("/api/tools");
+        if (response.ok) {
+          const toolsData = await response.json();
+          setTools(toolsData);
+        }
+      } catch (error) {
+        console.error("Failed to fetch tools:", error);
+      }
+    };
+
+    fetchTools();
+  }, []);
 
   useEffect(() => {
     if (scrollAreaRef.current) {
@@ -51,29 +66,88 @@ export default function ChatbotLayout() {
   };
 
   const handleToolsClick = () => {
-    console.log("Tools function is active");
+    console.log("Tools dropdown opened");
+  };
+
+  const toggleTool = (toolId) => {
+    setEnabledTools((prev) => {
+      const newSet = new Set(prev);
+      if (newSet.has(toolId)) {
+        newSet.delete(toolId);
+        console.log(`Tool ${toolId} disabled`);
+      } else {
+        newSet.add(toolId);
+        console.log(`Tool ${toolId} enabled`);
+      }
+      return newSet;
+    });
   };
 
   const handleMicClick = () => {
     console.log("Microphone function is active");
   };
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     console.log("Submit function is active");
-    if (inputValue.trim()) {
-      const newMessage = {
-        id: messages.length + 1,
+    if (inputValue.trim() && !isLoading) {
+      const userMessage = {
+        id: uuidv4(),
         type: "user",
         content: inputValue,
         timestamp: new Date(),
+        tools: Array.from(enabledTools),
       };
-      setMessages([...messages, newMessage]);
+
+      const newMessages = [...messages, userMessage];
+      setMessages(newMessages);
       setInputValue("");
+      setIsLoading(true);
+
+      try {
+        const response = await fetch("/api/chat", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            messages: newMessages.map((msg) => ({
+              role: msg.type === "user" ? "user" : "assistant",
+              content: msg.content,
+              tools: msg.tools || [],
+            })),
+          }),
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+          const assistantMessage = {
+            id: uuidv4(),
+            type: "assistant",
+            content: data.content,
+            timestamp: new Date(),
+            toolsUsed: data.toolsUsed || [],
+          };
+          setMessages([...newMessages, assistantMessage]);
+        } else {
+          throw new Error("Failed to get response");
+        }
+      } catch (error) {
+        console.error("Error:", error);
+        const errorMessage = {
+          id: uuidv4(),
+          type: "assistant",
+          content: "Sorry, I encountered an error connecting to the server.",
+          timestamp: new Date(),
+        };
+        setMessages([...newMessages, errorMessage]);
+      } finally {
+        setIsLoading(false);
+      }
     }
   };
 
   const handleKeyDown = (e) => {
-    if (e.key === "Enter" && !e.shiftKey) {
+    if (e.key === "Enter" && !e.shiftKey && !isLoading) {
       e.preventDefault();
       handleSubmit();
     }
@@ -126,6 +200,12 @@ export default function ChatbotLayout() {
                       message.type === "user" ? "justify-end" : "justify-start"
                     }`}
                   >
+                    {message.type === "assistant" && (
+                      <div className="flex-shrink-0 w-8 h-8 rounded-full bg-blue-600 flex items-center justify-center">
+                        <Bot className="w-5 h-5 text-white" />
+                      </div>
+                    )}
+
                     <div
                       className={`flex flex-col max-w-[80%] ${
                         message.type === "user" ? "items-end" : "items-start"
@@ -134,7 +214,7 @@ export default function ChatbotLayout() {
                       <div
                         className={`rounded-2xl px-4 py-3 ${
                           message.type === "user"
-                            ? "bg-orange-600 text-white"
+                            ? "bg-blue-600 text-white"
                             : "bg-gray-800 text-gray-100 border border-gray-700"
                         }`}
                       >
@@ -142,6 +222,24 @@ export default function ChatbotLayout() {
                           {message.content}
                         </div>
                       </div>
+                      {/* Show tools used for assistant messages */}
+                      {message.type === "assistant" &&
+                        message.toolsUsed &&
+                        message.toolsUsed.length > 0 && (
+                          <div className="flex flex-wrap gap-1 mt-2">
+                            {message.toolsUsed.map((toolId) => {
+                              const tool = tools.find((t) => t.id === toolId);
+                              return tool ? (
+                                <span
+                                  key={toolId}
+                                  className="text-xs bg-blue-600/20 text-blue-400 px-2 py-1 rounded-full border border-blue-600/30"
+                                >
+                                  {tool.name}
+                                </span>
+                              ) : null;
+                            })}
+                          </div>
+                        )}
 
                       <div className="flex items-center gap-2 mt-2 text-xs text-gray-500">
                         <span>{formatTime(message.timestamp)}</span>
@@ -212,15 +310,49 @@ export default function ChatbotLayout() {
                 <Plus className="w-5 h-5 text-gray-400" />
               </Button>
 
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={handleToolsClick}
-                className="flex items-center gap-2 px-3 py-2 hover:bg-gray-700 rounded-lg transition-colors flex-shrink-0 mt-1"
-              >
-                <Wrench className="w-4 h-4 text-gray-400" />
-                <span className="text-gray-300 text-sm">Tools</span>
-              </Button>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={handleToolsClick}
+                    className="flex items-center gap-2 px-3 py-2 hover:bg-gray-700 rounded-lg transition-colors flex-shrink-0 mt-1"
+                  >
+                    <Wrench className="w-4 h-4 text-gray-400" />
+                    <span className="text-gray-300 text-sm">Tools</span>
+                    <ChevronDown className="w-3 h-3 text-gray-400" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent className="w-56 bg-gray-800 border-gray-700">
+                  {tools.length === 0 ? (
+                    <DropdownMenuItem disabled className="text-gray-500">
+                      No tools available
+                    </DropdownMenuItem>
+                  ) : (
+                    tools.map((tool) => (
+                      <DropdownMenuItem
+                        key={tool.id}
+                        className="flex items-center justify-between p-3 hover:bg-gray-700 focus:bg-gray-700"
+                        onSelect={(e) => e.preventDefault()}
+                      >
+                        <div className="flex flex-col">
+                          <span className="text-white text-sm font-medium">
+                            {tool.name}
+                          </span>
+                          <span className="text-gray-400 text-xs">
+                            {tool.description}
+                          </span>
+                        </div>
+                        <Switch
+                          checked={enabledTools.has(tool.id)}
+                          onCheckedChange={() => toggleTool(tool.id)}
+                          className="data-[state=checked]:bg-blue-600"
+                        />
+                      </DropdownMenuItem>
+                    ))
+                  )}
+                </DropdownMenuContent>
+              </DropdownMenu>
 
               <Textarea
                 value={inputValue}
@@ -228,11 +360,11 @@ export default function ChatbotLayout() {
                   setInputValue(e.target.value);
                   e.target.style.height = "auto";
                   e.target.style.height =
-                    Math.min(e.target.scrollHeight, 240) + "px";
+                    Math.min(e.target.scrollHeight, 120) + "px";
                 }}
                 onKeyDown={handleKeyDown}
                 placeholder="Ask anything"
-                className="flex-1 bg-transparent h-auto text-white placeholder-gray-500 border-none outline-none resize-none min-h-[40px] focus-visible:ring-0 focus-visible:ring-offset-0"
+                className="flex-1 bg-transparent text-white placeholder-gray-500 border-none outline-none resize-none min-h-[40px] max-h-[120px] focus-visible:ring-0 focus-visible:ring-offset-0"
                 rows={1}
               />
 
@@ -248,10 +380,14 @@ export default function ChatbotLayout() {
               <Button
                 size="sm"
                 onClick={handleSubmit}
-                disabled={!inputValue.trim()}
+                disabled={!inputValue.trim() || isLoading}
                 className="p-2 bg-gray-600 hover:bg-gray-500 rounded-full transition-colors disabled:bg-gray-700 disabled:opacity-50 flex-shrink-0 mt-1"
               >
-                <ArrowUp className="w-5 h-5 text-white" />
+                {isLoading ? (
+                  <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                ) : (
+                  <ArrowUp className="w-5 h-5 text-white" />
+                )}
               </Button>
             </div>
           </div>
