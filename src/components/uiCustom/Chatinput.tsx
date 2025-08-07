@@ -69,15 +69,15 @@ export default function ChatbotLayout() {
     console.log("Tools dropdown opened");
   };
 
-  const toggleTool = (toolId) => {
+  const toggleTool = (tool) => {
     setEnabledTools((prev) => {
       const newSet = new Set(prev);
-      if (newSet.has(toolId)) {
-        newSet.delete(toolId);
-        console.log(`Tool ${toolId} disabled`);
+      if (newSet.has(tool)) {
+        newSet.delete(tool);
+        console.log(`Tool ${tool} disabled`);
       } else {
-        newSet.add(toolId);
-        console.log(`Tool ${toolId} enabled`);
+        newSet.add(tool);
+        console.log(`Tool ${tool} enabled`);
       }
       return newSet;
     });
@@ -88,7 +88,6 @@ export default function ChatbotLayout() {
   };
 
   const handleSubmit = async () => {
-    console.log("Submit function is active");
     if (inputValue.trim() && !isLoading) {
       const userMessage = {
         id: uuidv4(),
@@ -97,7 +96,6 @@ export default function ChatbotLayout() {
         timestamp: new Date(),
         tools: Array.from(enabledTools),
       };
-
       const newMessages = [...messages, userMessage];
       setMessages(newMessages);
       setInputValue("");
@@ -297,98 +295,103 @@ export default function ChatbotLayout() {
       </div>
 
       {/* Input Area */}
-      <div className="flex-shrink-0 p-4 border-t border-gray-800">
+      <div className="flex-shrink-0 p-4">
         <div className="max-w-4xl mx-auto">
           <div className="bg-gray-800 rounded-3xl border border-gray-700 p-4">
-            <div className="flex items-start gap-3">
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={handleAddClick}
-                className="p-2 hover:bg-gray-700 rounded-lg transition-colors flex-shrink-0 mt-1"
-              >
-                <Plus className="w-5 h-5 text-gray-400" />
-              </Button>
-
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
+            <div className="flex-col gap-3">
+              <div className="flex-1">
+                <Textarea
+                  value={inputValue}
+                  onChange={(e) => {
+                    setInputValue(e.target.value);
+                    e.target.style.height = "auto";
+                    e.target.style.height =
+                      Math.min(e.target.scrollHeight, 120) + "px";
+                  }}
+                  onKeyDown={handleKeyDown}
+                  placeholder="Ask anything"
+                  className="flex-1 bg-transparent text-white placeholder-gray-500 border-none outline-none resize-none min-h-[40px] max-h-[120px] focus-visible:ring-0 focus-visible:ring-offset-0"
+                  rows={1}
+                />
+              </div>
+              <div className="flex justify-between m-2 gap-3">
+                <div className="flex">
                   <Button
                     variant="ghost"
                     size="sm"
-                    onClick={handleToolsClick}
-                    className="flex items-center gap-2 px-3 py-2 hover:bg-gray-700 rounded-lg transition-colors flex-shrink-0 mt-1"
+                    onClick={handleAddClick}
+                    className="p-2 hover:bg-gray-700 rounded-lg transition-colors flex-shrink-0 mt-1"
                   >
-                    <Wrench className="w-4 h-4 text-gray-400" />
-                    <span className="text-gray-300 text-sm">Tools</span>
-                    <ChevronDown className="w-3 h-3 text-gray-400" />
+                    <Plus className="w-5 h-5 text-gray-400" />
                   </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent className="w-56 bg-gray-800 border-gray-700">
-                  {tools.length === 0 ? (
-                    <DropdownMenuItem disabled className="text-gray-500">
-                      No tools available
-                    </DropdownMenuItem>
-                  ) : (
-                    tools.map((tool) => (
-                      <DropdownMenuItem
-                        key={tool.id}
-                        className="flex items-center justify-between p-3 hover:bg-gray-700 focus:bg-gray-700"
-                        onSelect={(e) => e.preventDefault()}
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={handleToolsClick}
+                        className="flex items-center gap-2 px-3 py-2 hover:bg-gray-700 rounded-lg transition-colors flex-shrink-0 mt-1"
                       >
-                        <div className="flex flex-col">
-                          <span className="text-white text-sm font-medium">
-                            {tool.name}
-                          </span>
-                          <span className="text-gray-400 text-xs">
-                            {tool.description}
-                          </span>
-                        </div>
-                        <Switch
-                          checked={enabledTools.has(tool.id)}
-                          onCheckedChange={() => toggleTool(tool.id)}
-                          className="data-[state=checked]:bg-blue-600"
-                        />
-                      </DropdownMenuItem>
-                    ))
-                  )}
-                </DropdownMenuContent>
-              </DropdownMenu>
+                        <Wrench className="w-4 h-4 text-gray-400" />
+                        <span className="text-gray-300 text-sm">Tools</span>
+                        <ChevronDown className="w-3 h-3 text-gray-400" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent className="w-56 bg-gray-800 border-gray-700">
+                      {tools.length === 0 ? (
+                        <DropdownMenuItem disabled className="text-gray-500">
+                          No tools available
+                        </DropdownMenuItem>
+                      ) : (
+                        tools.map((tool) => (
+                          <DropdownMenuItem
+                            key={tool.name}
+                            className="flex items-center justify-between p-3 hover:bg-gray-700 focus:bg-gray-700"
+                            onSelect={(e) => e.preventDefault()}
+                          >
+                            <div className="flex flex-col">
+                              <span className="text-white text-sm font-medium">
+                                {tool.name}
+                              </span>
+                              <span className="text-gray-400 text-xs">
+                                {tool.description}
+                              </span>
+                            </div>
+                            <Switch
+                              checked={enabledTools.has(tool)}
+                              onCheckedChange={() => toggleTool(tool)}
+                              className="data-[state=checked]:bg-blue-600"
+                            />
+                          </DropdownMenuItem>
+                        ))
+                      )}
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                </div>
+                <div className="justify-end items-end">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={handleMicClick}
+                    className="p-2 hover:bg-gray-700 rounded-lg transition-colors flex-shrink-0 mt-1"
+                  >
+                    <Mic className="w-5 h-5 text-gray-400" />
+                  </Button>
 
-              <Textarea
-                value={inputValue}
-                onChange={(e) => {
-                  setInputValue(e.target.value);
-                  e.target.style.height = "auto";
-                  e.target.style.height =
-                    Math.min(e.target.scrollHeight, 120) + "px";
-                }}
-                onKeyDown={handleKeyDown}
-                placeholder="Ask anything"
-                className="flex-1 bg-transparent text-white placeholder-gray-500 border-none outline-none resize-none min-h-[40px] max-h-[120px] focus-visible:ring-0 focus-visible:ring-offset-0"
-                rows={1}
-              />
-
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={handleMicClick}
-                className="p-2 hover:bg-gray-700 rounded-lg transition-colors flex-shrink-0 mt-1"
-              >
-                <Mic className="w-5 h-5 text-gray-400" />
-              </Button>
-
-              <Button
-                size="sm"
-                onClick={handleSubmit}
-                disabled={!inputValue.trim() || isLoading}
-                className="p-2 bg-gray-600 hover:bg-gray-500 rounded-full transition-colors disabled:bg-gray-700 disabled:opacity-50 flex-shrink-0 mt-1"
-              >
-                {isLoading ? (
-                  <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                ) : (
-                  <ArrowUp className="w-5 h-5 text-white" />
-                )}
-              </Button>
+                  <Button
+                    size="sm"
+                    onClick={handleSubmit}
+                    disabled={!inputValue.trim() || isLoading}
+                    className="p-2 bg-gray-600 hover:bg-gray-500 rounded-full transition-colors disabled:bg-gray-700 disabled:opacity-50 flex-shrink-0 mt-1"
+                  >
+                    {isLoading ? (
+                      <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                    ) : (
+                      <ArrowUp className="w-5 h-5 text-white" />
+                    )}
+                  </Button>
+                </div>
+              </div>
             </div>
           </div>
         </div>

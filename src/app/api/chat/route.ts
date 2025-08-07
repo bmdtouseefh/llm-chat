@@ -10,18 +10,18 @@ export async function POST(request: NextRequest) {
       .pop();
 
     const availableTools = latestUserMessage?.tools || [];
-
     // Format tools for Ollama (if your Ollama setup supports tools)
-    const ollamaTools = availableTools.map((toolId: string) => ({
+    const ollamaTools = availableTools.map((tool) => ({
       type: "function",
       function: {
-        name: toolId,
-        description: getToolDescription(toolId),
+        name: tool.name,
+        description: tool.description,
+        parameters: tool.inputSchema,
       },
     }));
 
     const requestBody: any = {
-      model: "llama3.2:3b",
+      model: "qwen3:1.7b",
       messages: messages.map((msg: any) => ({
         role: msg.role,
         content: msg.content,
@@ -34,31 +34,20 @@ export async function POST(request: NextRequest) {
       requestBody.tools = ollamaTools;
     }
 
-    const response = await fetch("http://localhost:11434/api/chat", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(requestBody),
-    });
-
-    if (!response.ok) {
-      throw new Error("Ollama request failed");
-    }
-
-    const data = await response.json();
+    const data = await processQuery(requestBody);
+    console.log("Data: ", data);
 
     // Extract tool calls from Ollama response if present
-    const toolsUsed = data.message.tool_calls
-      ? data.message.tool_calls.map((call: any) => call.function.name)
-      : determineToolsUsed(
-          messages[messages.length - 1]?.content || "",
-          availableTools
-        );
+    // const toolsUsed = data.message.tool_calls
+    //   ? data.message.tool_calls.map((call: any) => call.function.name)
+    //   : determineToolsUsed(
+    //       messages[messages.length - 1]?.content || "",
+    //       availableTools
+    //     );
 
     return NextResponse.json({
-      content: data.message.content,
-      toolsUsed: toolsUsed,
+      content: data,
+      // toolsUsed: toolsUsed,
     });
   } catch (error) {
     console.error("Chat API error:", error);
@@ -67,19 +56,6 @@ export async function POST(request: NextRequest) {
       { status: 500 }
     );
   }
-}
-
-// Helper function to get tool descriptions
-function getToolDescription(toolId: string): string {
-  const descriptions: { [key: string]: string } = {
-    web_search: "Search the internet for current information",
-    image_generation: "Generate images from text descriptions",
-    code_interpreter: "Execute and analyze code",
-    file_reader: "Read and analyze uploaded files",
-    calculator: "Perform mathematical calculations",
-  };
-
-  return descriptions[toolId] || "A helpful tool";
 }
 
 // Fallback function if Ollama doesn't return tool calls
@@ -127,4 +103,30 @@ function determineToolsUsed(
   }
 
   return usedTools;
+}
+
+async function processQuery(requestBody: any) {
+  const response = await fetch("http://localhost:11434/api/chat", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(requestBody),
+  });
+
+  const finalText = [];
+
+  if (!response.ok) {
+    throw new Error("Ollama request failed ");
+  }
+
+  const data = await response.json();
+  console.log(data);
+  if (!data.message["tool_calls"]) {
+    finalText.push(data.message.content);
+  } else if (data.message.tool_calls) {
+    // implement tool handling
+  }
+
+  return finalText.join("\n");
 }
