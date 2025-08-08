@@ -119,6 +119,7 @@ async function processQuery(requestBody: any) {
   console.log(data);
 
   if (!data.message["tool_calls"]) {
+    requestBody.messages.push(data.message.content);
     finalText.push(data.message.content);
   } else if (data.message.tool_calls) {
     const toolsUsed = data.message.tool_calls.map(
@@ -134,8 +135,8 @@ async function processQuery(requestBody: any) {
         role: "tool",
         content: result.content as string,
       });
+      console.log("Called tool and got", requestBody);
     }
-    console.log("Called tool and got", requestBody.messages);
 
     const ollamaResponse = await fetch("http://localhost:11434/api/chat", {
       method: "POST",
