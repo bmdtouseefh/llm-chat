@@ -145,11 +145,24 @@ class MCPClient {
     return finalText.join("\n");
   }
 
+  async toolCaller(toolName, args: any): Promise<any> {
+    console.log(`🔧 Using ${toolName} with ${JSON.stringify(args)}...`);
+
+    try {
+      const mcp_result = await this.mcp.callTool(toolName, args);
+      const tool_output = mcp_result.content[0].text;
+      return tool_output;
+    } catch (e) {
+      const error_output = `Error calling ${toolName}: ${e}`;
+      return error_output;
+    }
+  }
+
   async cleanup() {
     await this.mcp.close();
   }
 }
-const mcpClient = new MCPClient();
+export const mcpClient = new MCPClient();
 export async function GET() {
   try {
     await mcpClient.connectToServer("../mcps/simple-search/server.py");

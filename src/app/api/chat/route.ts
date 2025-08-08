@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
+import { mcpClient } from "../tools/route";
+import { log } from "node:console";
 
 export async function POST(request: NextRequest) {
   try {
@@ -35,19 +37,12 @@ export async function POST(request: NextRequest) {
     }
 
     const data = await processQuery(requestBody);
-    console.log("Data: ", data);
 
     // Extract tool calls from Ollama response if present
-    // const toolsUsed = data.message.tool_calls
-    //   ? data.message.tool_calls.map((call: any) => call.function.name)
-    //   : determineToolsUsed(
-    //       messages[messages.length - 1]?.content || "",
-    //       availableTools
-    //     );
 
     return NextResponse.json({
-      content: data,
-      // toolsUsed: toolsUsed,
+      content: data?.response,
+      toolsUsed: data?.toolsUsed,
     });
   } catch (error) {
     console.error("Chat API error:", error);
@@ -122,11 +117,45 @@ async function processQuery(requestBody: any) {
 
   const data = await response.json();
   console.log(data);
+
   if (!data.message["tool_calls"]) {
     finalText.push(data.message.content);
   } else if (data.message.tool_calls) {
-    // implement tool handling
-  }
+    const toolsUsed = data.message.tool_calls.map(
+      (call: any) => call.function.name
+    );
+    for (const tool of data.message.tool_calls) {
+      const toolName = tool.function.name;
+      const toolArgs = tool.function.arguments;
 
-  return finalText.join("\n");
+      const result = await mcpClient.toolCaller(toolName, toolArgs);
+
+      requestBody.messages.push({
+        role: "tool",
+        content: result.content as string,
+      });
+    }
+    console.log("Called tool and got", requestBody.messages);
+
+    const ollamaResponse = await fetch("http://localhost:11434/api/chat", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: "llama3.2:3b",
+        messages: requestBody.messages,
+        stream: false,
+      }),
+    });
+
+    const ollamaData = await ollamaResponse.json();
+
+    // Extract text from Ollama response
+    const responseText = ollamaData.message?.content || "";
+    finalText.push(responseText);
+
+    return { response: finalText.join("\n"), toolsUsed: toolsUsed };
+  }
+  return { response: finalText.join("\n"), toolsUsed: null };
 }
