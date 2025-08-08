@@ -133,7 +133,7 @@ async function processQuery(requestBody: any) {
 
       requestBody.messages.push({
         role: "tool",
-        content: result.content as string,
+        content: result as string,
       });
       console.log("Called tool and got", requestBody);
     }
