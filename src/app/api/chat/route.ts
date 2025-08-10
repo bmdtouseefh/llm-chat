@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
 import { mcpClient } from "../tools/route";
-import { log } from "node:console";
 
 export async function POST(request: NextRequest) {
   try {
@@ -11,34 +10,39 @@ export async function POST(request: NextRequest) {
       .filter((msg: any) => msg.role === "user")
       .pop();
 
-    const availableTools = latestUserMessage?.tools || [];
+    const availableTools = await fetch("http://localhost:3000/api/tools/list", {
+      method: "GET",
+    });
+    const toolList = await availableTools.json();
     // Format tools for Ollama (if your Ollama setup supports tools)
-    const ollamaTools = availableTools.map((tool) => ({
+
+    const ollamaTools = toolList.map((tool) => ({
       type: "function",
       function: {
         name: tool.name,
         description: tool.description,
-        parameters: tool.inputSchema,
+        parameters: tool.input_schema,
       },
     }));
 
     const requestBody: any = {
-      model: "qwen3:1.7b",
+      model: "llama3.2:3b",
       messages: messages.map((msg: any) => ({
         role: msg.role,
+
         content: msg.content,
       })),
       stream: false,
+      // think: true,
     };
 
-    // Add tools to request if available
     if (ollamaTools.length > 0) {
       requestBody.tools = ollamaTools;
     }
 
-    const data = await processQuery(requestBody);
+    console.log(requestBody);
 
-    // Extract tool calls from Ollama response if present
+    const data = await processQuery(requestBody);
 
     return NextResponse.json({
       content: data?.response,
@@ -53,53 +57,6 @@ export async function POST(request: NextRequest) {
   }
 }
 
-// Fallback function if Ollama doesn't return tool calls
-function determineToolsUsed(
-  content: string,
-  availableTools: string[]
-): string[] {
-  const usedTools: string[] = [];
-  const lowerContent = content.toLowerCase();
-
-  if (
-    availableTools.includes("web_search") &&
-    (lowerContent.includes("search") ||
-      lowerContent.includes("latest") ||
-      lowerContent.includes("current"))
-  ) {
-    usedTools.push("web_search");
-  }
-
-  if (
-    availableTools.includes("calculator") &&
-    (lowerContent.includes("calculate") ||
-      lowerContent.includes("math") ||
-      /\d+[\+\-\*\/]\d+/.test(lowerContent))
-  ) {
-    usedTools.push("calculator");
-  }
-
-  if (
-    availableTools.includes("code_interpreter") &&
-    (lowerContent.includes("code") ||
-      lowerContent.includes("python") ||
-      lowerContent.includes("javascript"))
-  ) {
-    usedTools.push("code_interpreter");
-  }
-
-  if (
-    availableTools.includes("image_generation") &&
-    (lowerContent.includes("image") ||
-      lowerContent.includes("picture") ||
-      lowerContent.includes("generate"))
-  ) {
-    usedTools.push("image_generation");
-  }
-
-  return usedTools;
-}
-
 async function processQuery(requestBody: any) {
   const response = await fetch("http://localhost:11434/api/chat", {
     method: "POST",
@@ -112,30 +69,41 @@ async function processQuery(requestBody: any) {
   const finalText = [];
 
   if (!response.ok) {
-    throw new Error("Ollama request failed ");
+    console.log("Ollama request failed ", await response.json());
   }
 
   const data = await response.json();
-  console.log(data);
+
+  requestBody.messages.push(data.message);
 
   if (!data.message["tool_calls"]) {
+    console.log(data);
+
     requestBody.messages.push(data.message.content);
     finalText.push(data.message.content);
   } else if (data.message.tool_calls) {
+    console.log(data);
+
     const toolsUsed = data.message.tool_calls.map(
       (call: any) => call.function.name
     );
     for (const tool of data.message.tool_calls) {
+      console.log(tool);
+
       const toolName = tool.function.name;
       const toolArgs = tool.function.arguments;
 
-      const result = await mcpClient.toolCaller(toolName, toolArgs);
+      const result = await fetch("http://localhost:3000/api/tools/calltool", {
+        body: JSON.stringify({ toolName: toolName, args: toolArgs }),
+        method: "POST",
+      });
+      const toolResponse = await result.json();
+      console.log(toolResponse);
 
       requestBody.messages.push({
         role: "tool",
-        content: result as string,
+        content: toolResponse,
       });
-      console.log("Called tool and got", requestBody);
     }
 
     const ollamaResponse = await fetch("http://localhost:11434/api/chat", {
@@ -143,16 +111,11 @@ async function processQuery(requestBody: any) {
       headers: {
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({
-        model: "llama3.2:3b",
-        messages: requestBody.messages,
-        stream: false,
-      }),
+      body: JSON.stringify(requestBody),
     });
 
     const ollamaData = await ollamaResponse.json();
 
-    // Extract text from Ollama response
     const responseText = ollamaData.message?.content || "";
     finalText.push(responseText);
 

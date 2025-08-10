@@ -37,7 +37,7 @@ export default function ChatbotLayout() {
   useEffect(() => {
     const fetchTools = async () => {
       try {
-        const response = await fetch("/api/tools");
+        const response = await fetch("/api/tools/list");
         if (response.ok) {
           const toolsData = await response.json();
           setTools(toolsData);
